@@ -4,16 +4,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import org.springframework.web.util.UriComponentsBuilder;
 import springfox.documentation.builders.ApiInfoBuilder;
 import springfox.documentation.builders.RequestHandlerSelectors;
 import springfox.documentation.service.ApiInfo;
 import springfox.documentation.service.Contact;
 import springfox.documentation.spi.DocumentationType;
-import springfox.documentation.spring.web.paths.Paths;
-import springfox.documentation.spring.web.paths.RelativePathProvider;
 import springfox.documentation.spring.web.plugins.Docket;
-import springfox.documentation.swagger2.annotations.EnableSwagger2;
+import springfox.documentation.oas.annotations.EnableOpenApi;
 
 {{#useOptional}}
 import java.util.Optional;
@@ -27,9 +24,18 @@ import javax.annotation.Generated;
 import javax.servlet.ServletContext;
 {{/useJakartaEe}}
 
+import com.fasterxml.classmate.TypeResolver;
+import springfox.documentation.schema.AlternateTypeRule;
+import springfox.documentation.schema.AlternateTypeRules;
+import java.lang.reflect.Type;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Set;
+
 {{>generatedAnnotation}}
 @Configuration
-@EnableSwagger2
+@EnableOpenApi
 public class SpringFoxConfiguration {
 
     ApiInfo apiInfo() {
@@ -48,7 +54,14 @@ public class SpringFoxConfiguration {
 {{=<% %>=}}
     public Docket customImplementation(ServletContext servletContext, @Value("${openapi.<%title%>.base-path:<%>defaultBasePath%>}") String basePath) {
 <%={{ }}=%>
-        return new Docket(DocumentationType.SWAGGER_2)
+        Docket docket = new Docket(DocumentationType.OAS_30);
+
+        TypeResolver resolver = new TypeResolver();
+        addAlternateTypeWithSomeGenerics(docket, resolver, LocalDate.class, java.sql.Date.class);
+        addAlternateTypeWithSomeGenerics(docket, resolver, OffsetDateTime.class, java.util.Date.class);
+
+        return docket
+                .groupName("02_newapi")
                 .select()
                     .apis(RequestHandlerSelectors.basePackage("{{apiPackage}}"))
                     .build()
@@ -65,25 +78,28 @@ public class SpringFoxConfiguration {
                 .apiInfo(apiInfo());
     }
 
-    class BasePathAwareRelativePathProvider extends RelativePathProvider {
-        private String basePath;
+    private void addAlternateTypeWithSomeGenerics(Docket docket, TypeResolver typeResolver, Type original, Type alternate) {
+        // For all examples we will pretend original is Date and alternate is String
+        // to make it easier to understand what is happening
 
-        public BasePathAwareRelativePathProvider(ServletContext servletContext, String basePath) {
-            super(servletContext);
-            this.basePath = basePath;
-        }
+        // e.g. if swagger sees Date convert it to String
+        docket.alternateTypeRules(AlternateTypeRules.newRule(original, alternate));
 
-        @Override
-        protected String applicationPath() {
-            return  Paths.removeAdjacentForwardSlashes(UriComponentsBuilder.fromPath(super.applicationPath()).path(basePath).build().toString());
-        }
+        // e.g. if swagger sees Set<Date> convert it to Set<String>
+        docket.alternateTypeRules(
+                new AlternateTypeRule(typeResolver.resolve(Set.class, original),
+                        typeResolver.resolve(Set.class, alternate)));
 
-        @Override
-        public String getOperationPath(String operationPath) {
-            UriComponentsBuilder uriComponentsBuilder = UriComponentsBuilder.fromPath("/");
-            return Paths.removeAdjacentForwardSlashes(
-                    uriComponentsBuilder.path(operationPath.replaceFirst("^" + basePath, "")).build().toString());
-        }
+        // e.g. if swagger sees List<Date> convert it to List<String>
+        docket.alternateTypeRules(
+                new AlternateTypeRule(typeResolver.resolve(List.class, original),
+                        typeResolver.resolve(List.class, alternate)));
+
+        // We will later tell swagger that optionals are all unpacked but remember swagger is not recursive so
+        // we must again tell it for this specific type what it unpacks to e.g. Optional<Date> maps to String
+        // e.g. if swagger sees Optional<Date> convert it to String
+        docket.alternateTypeRules(
+                new AlternateTypeRule(typeResolver.resolve(Optional.class, original),
+                        typeResolver.resolve(alternate)));
     }
-
 }

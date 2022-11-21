@@ -93,10 +93,9 @@ public class HomeController {
     }
 {{/reactive}}
 {{^reactive}}
-
-    @RequestMapping("/")
+    @RequestMapping({"/", "/swagger-ui.html"})
     public String index() {
-        return "redirect:swagger-ui.html";
+        return "redirect:{{#useSpringfox}}swagger-ui/{{/useSpringfox}}{{^useSpringfox}}swagger-ui/index.html?url=../openapi.json{{/useSpringfox}}";
     }
 {{/reactive}}
 {{/useSwaggerUI}}
